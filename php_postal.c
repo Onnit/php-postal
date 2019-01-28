@@ -49,6 +49,7 @@ zend_class_entry *parser_class_entry_ptr;
  */
 static const zend_function_entry expand_methods[] = {
   PHP_ME(Expand, expand_address, NULL, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+  PHP_ME(Expand, expand_address_root, NULL, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
   PHP_FE_END /* Must be the last line in expand_methods[] */
 };
  
@@ -177,8 +178,9 @@ PHP_MINFO_FUNCTION(postal)
 }
 /* }}} */
 
-
-PHP_METHOD(Expand, expand_address) {
+/* {{{ -- php_postal_expand_address_impl */
+static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bool root)
+{
     char *address;
 #if PHP_MAJOR_VERSION == 5
     int address_len;
@@ -528,7 +530,13 @@ PHP_METHOD(Expand, expand_address) {
     }
 
     size_t num_expansions;
-    char **expansions = libpostal_expand_address(address, options, &num_expansions);
+    char **expansions;
+
+    if (root) {
+		expansions = libpostal_expand_address_root(address, options, &num_expansions);
+    } else {
+		expansions = libpostal_expand_address(address, options, &num_expansions);
+    }
 
     int copy = 1;
 #if PHP_MAJOR_VERSION == 5
@@ -568,6 +576,14 @@ PHP_METHOD(Expand, expand_address) {
     RETURN_ZVAL(&ret, copy, destruct);
 #endif
 
+}
+
+PHP_METHOD(Expand, expand_address) {
+    php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAM_PASSTHRU, 0);
+}
+
+PHP_METHOD(Expand, expand_address_root) {
+    php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAM_PASSTHRU, 1);
 }
 
 PHP_METHOD(Parser, parse_address) {

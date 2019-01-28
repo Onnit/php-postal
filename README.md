@@ -14,6 +14,11 @@ foreach ($expansions as $expansion) {
     echo "$expansion\n";
 }
 
+$expansions = Postal\Expand::expand_address_root("Quatre vingt douze Ave des Champs-Élysées");
+foreach ($expansions as $expansion) {
+    echo "$expansion\n";
+}
+
 $parsed = Postal\Parser::parse_address("The Book Club 100-106 Leonard St, Shoreditch, London, Greater London, EC2A 4RH, United Kingdom");
 foreach ($parsed as $component) {
     echo "{$component['label']}: {$component['value']}\n";

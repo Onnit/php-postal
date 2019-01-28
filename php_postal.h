@@ -43,6 +43,7 @@ PHP_MSHUTDOWN_FUNCTION(postal);
 PHP_MINFO_FUNCTION(postal);
 
 PHP_METHOD(Expand, expand_address);
+PHP_METHOD(Expand, expand_address_root);
 PHP_METHOD(Parser, parse_address);
 
 /* 
