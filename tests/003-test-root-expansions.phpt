@@ -17,5 +17,7 @@ foreach ($expansions as $expansion) {
 --EXPECT--
 92 champs-elysees
 92 champs elysees
+92 champselysees
 92 champs-elysees
 92 champs elysees
+92 champselysees

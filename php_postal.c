@@ -47,11 +47,21 @@ zend_class_entry *parser_class_entry_ptr;
  * 
  * Every user visible method must have an entry in expand_methods
  */
-static const zend_function_entry expand_methods[] = {
-  PHP_ME(Expand, expand_address, NULL, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
-  PHP_ME(Expand, expand_address_root, NULL, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
-  PHP_FE_END /* Must be the last line in expand_methods[] */
-};
+ ZEND_BEGIN_ARG_INFO_EX(arginfo_void, 0, 0, 0)
+ ZEND_END_ARG_INFO()
+ #if PHP_MAJOR_VERSION == 5 || PHP_MAJOR_VERSION == 7
+    static const zend_function_entry expand_methods[] = {
+      PHP_ME(Expand, expand_address, NULL, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+      PHP_ME(Expand, expand_address_root, NULL, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+      PHP_FE_END /* Must be the last line in expand_methods[] */
+    };
+#elif PHP_MAJOR_VERSION == 8
+    static const zend_function_entry expand_methods[] = {
+      PHP_ME(Expand, expand_address, arginfo_void, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+      PHP_ME(Expand, expand_address_root, arginfo_void, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+      PHP_FE_END /* Must be the last line in expand_methods[] */
+    };
+#endif
  
 /* }}} */
 
@@ -59,10 +69,17 @@ static const zend_function_entry expand_methods[] = {
  * 
  * Every user visible method must have an entry in parser_methods
  */
-static const zend_function_entry parser_methods[] = {
-  PHP_ME(Parser, parse_address, NULL, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
-  PHP_FE_END /* Must be the last line in expand_methods[] */
-};
+ #if PHP_MAJOR_VERSION == 5 || PHP_MAJOR_VERSION == 7
+    static const zend_function_entry parser_methods[] = {
+      PHP_ME(Parser, parse_address, NULL, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+      PHP_FE_END /* Must be the last line in expand_methods[] */
+    };
+#elif PHP_MAJOR_VERSION == 8
+    static const zend_function_entry parser_methods[] = {
+      PHP_ME(Parser, parse_address, arginfo_void, ZEND_ACC_PUBLIC|ZEND_ACC_STATIC)
+      PHP_FE_END /* Must be the last line in expand_methods[] */
+    };
+#endif
  
 /* }}} */
 
@@ -139,10 +156,15 @@ PHP_MINIT_FUNCTION(postal)
     REGISTER_LONG_CONSTANT("ADDRESS_ALL", LIBPOSTAL_ADDRESS_ALL, CONST_CS | CONST_PERSISTENT);
 
     INIT_CLASS_ENTRY(expand_ce, "Postal\\Expand", expand_methods);
-    expand_class_entry_ptr = zend_register_internal_class(&expand_ce TSRMLS_CC);
-
     INIT_CLASS_ENTRY(parser_ce, "Postal\\Parser", parser_methods);
-    parser_class_entry_ptr = zend_register_internal_class(&parser_ce TSRMLS_CC);
+
+    #if PHP_MAJOR_VERSION == 5 || PHP_MAJOR_VERSION == 7
+        expand_class_entry_ptr = zend_register_internal_class(&expand_ce TSRMLS_CC);
+        parser_class_entry_ptr = zend_register_internal_class(&parser_ce TSRMLS_CC);
+    #elif PHP_MAJOR_VERSION == 8
+        expand_class_entry_ptr = zend_register_internal_class(&expand_ce);
+        parser_class_entry_ptr = zend_register_internal_class(&parser_ce);
+    #endif
 
 	return SUCCESS;
 }
@@ -184,7 +206,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
     char *address;
 #if PHP_MAJOR_VERSION == 5
     int address_len;
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
     size_t address_len;
 #endif
     HashTable *php_options = NULL;
@@ -192,15 +214,21 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
 #if PHP_MAJOR_VERSION == 5
     zval **val;
     zval *ret;
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
     zval *val;
     zval ret;
     zend_string *str;
 #endif
 
-    if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s|h", &address, &address_len, &php_options) == FAILURE) {
-        return;
-    }
+    #if PHP_MAJOR_VERSION == 5 || PHP_MAJOR_VERSION == 7
+        if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s|h", &address, &address_len, &php_options) == FAILURE) {
+            return;
+        }
+    #elif PHP_MAJOR_VERSION == 8
+        if (zend_parse_parameters(ZEND_NUM_ARGS(), "s|h", &address, &address_len, &php_options) == FAILURE) {
+            return;
+        }
+    #endif
 
     libpostal_normalize_options_t options = libpostal_get_default_options();
 
@@ -245,7 +273,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
                 options.num_languages = num_languages;
             }
         }
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         str = zend_string_init(LANGUAGES_KEY, strlen(LANGUAGES_KEY), 0);
         if ((val = zend_hash_find(php_options, str)) != NULL) {
             if (Z_TYPE_P(val) != IS_ARRAY) {
@@ -254,7 +282,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
             size_t num_php_langs = zend_hash_num_elements(Z_ARRVAL_P(val));
             languages = malloc(sizeof(char *) * num_php_langs);
 
-            ulong num_key;
+            long num_key;
             zend_string *key;
             zval *php_lang;
 
@@ -287,7 +315,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
         if (zend_hash_find(php_options, ADDRESS_COMPONENTS_KEY, strlen(ADDRESS_COMPONENTS_KEY) + 1, (void **) &val) == SUCCESS) {
             options.address_components = (uint16_t)Z_LVAL_PP(val);
         }
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         str = zend_string_init(ADDRESS_COMPONENTS_KEY, strlen("address_components")-1, 0);
         if ((val = zend_hash_find(php_options, str)) != NULL) {
             options.address_components = (uint16_t)Z_LVAL_P(val);
@@ -300,7 +328,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
         if (zend_hash_find(php_options, LATIN_ASCII_KEY, strlen(LATIN_ASCII_KEY) + 1, (void **) &val) == SUCCESS) {
             options.latin_ascii = (bool)Z_LVAL_PP(val);
         }
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         str = zend_string_init(LATIN_ASCII_KEY, strlen(LATIN_ASCII_KEY), 0);
         if ((val = zend_hash_find(php_options, str)) != NULL) {
             options.latin_ascii = (bool)Z_LVAL_P(val);
@@ -313,7 +341,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
         if (zend_hash_find(php_options, TRANSLITERATE_KEY, strlen(TRANSLITERATE_KEY) + 1, (void **) &val) == SUCCESS) {
             options.transliterate = (bool)Z_LVAL_PP(val);
         }
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         str = zend_string_init(TRANSLITERATE_KEY, strlen(TRANSLITERATE_KEY), 0);
         if ((val = zend_hash_find(php_options, str)) != NULL) {
             options.transliterate = (bool)Z_LVAL_P(val);
@@ -326,7 +354,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
         if (zend_hash_find(php_options, STRIP_ACCENTS_KEY, strlen(STRIP_ACCENTS_KEY) + 1, (void **) &val) == SUCCESS) {
             options.strip_accents = (bool)Z_LVAL_PP(val);
         }
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         str = zend_string_init(STRIP_ACCENTS_KEY, strlen(STRIP_ACCENTS_KEY), 0);
         if ((val = zend_hash_find(php_options, str)) != NULL) {
             options.strip_accents = (bool)Z_LVAL_P(val);
@@ -339,7 +367,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
         if (zend_hash_find(php_options, DECOMPOSE_KEY, strlen(DECOMPOSE_KEY) + 1, (void **) &val) == SUCCESS) {
             options.decompose = (bool)Z_LVAL_PP(val);
         }
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         str = zend_string_init(DECOMPOSE_KEY, strlen(DECOMPOSE_KEY), 0);
         if ((val = zend_hash_find(php_options, str)) != NULL) {
             options.decompose = (bool)Z_LVAL_P(val);
@@ -352,7 +380,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
         if (zend_hash_find(php_options, LOWERCASE_KEY, strlen(LOWERCASE_KEY) + 1, (void **) &val) == SUCCESS) {
             options.lowercase = (bool)Z_LVAL_PP(val);
         }
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         str = zend_string_init(LOWERCASE_KEY, strlen(LOWERCASE_KEY), 0);
         if ((val = zend_hash_find(php_options, str)) != NULL) {
             options.lowercase = (bool)Z_LVAL_P(val);
@@ -365,7 +393,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
         if (zend_hash_find(php_options, TRIM_STRING_KEY, strlen(TRIM_STRING_KEY) + 1, (void **) &val) == SUCCESS) {
             options.trim_string = (bool)Z_LVAL_PP(val);
         }
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         str = zend_string_init(TRIM_STRING_KEY, strlen(TRIM_STRING_KEY), 0);
         if ((val = zend_hash_find(php_options, str)) != NULL) {
             options.trim_string = (bool)Z_LVAL_P(val);
@@ -378,7 +406,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
         if (zend_hash_find(php_options, DROP_PARENTHETICALS_KEY, strlen(DROP_PARENTHETICALS_KEY) + 1, (void **) &val) == SUCCESS) {
             options.drop_parentheticals = (bool)Z_LVAL_PP(val);
         }
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         str = zend_string_init(DROP_PARENTHETICALS_KEY, strlen(DROP_PARENTHETICALS_KEY), 0);
         if ((val = zend_hash_find(php_options, str)) != NULL) {
             options.drop_parentheticals = (bool)Z_LVAL_P(val);
@@ -391,7 +419,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
         if (zend_hash_find(php_options, REPLACE_NUMERIC_HYPHENS_KEY, strlen(REPLACE_NUMERIC_HYPHENS_KEY) + 1, (void **) &val) == SUCCESS) {
             options.replace_numeric_hyphens  = (bool)Z_LVAL_PP(val);
         }
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         str = zend_string_init(REPLACE_NUMERIC_HYPHENS_KEY, strlen(REPLACE_NUMERIC_HYPHENS_KEY), 0);
         if ((val = zend_hash_find(php_options, str)) != NULL) {
             options.replace_numeric_hyphens = (bool)Z_LVAL_P(val);
@@ -404,7 +432,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
         if (zend_hash_find(php_options, DELETE_NUMERIC_HYPHENS_KEY, strlen(DELETE_NUMERIC_HYPHENS_KEY) + 1, (void **) &val) == SUCCESS) {
             options.delete_numeric_hyphens  = (bool)Z_LVAL_PP(val);
         }
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         str = zend_string_init(DELETE_NUMERIC_HYPHENS_KEY, strlen(DELETE_NUMERIC_HYPHENS_KEY), 0);
         if ((val = zend_hash_find(php_options, str)) != NULL) {
             options.delete_numeric_hyphens = (bool)Z_LVAL_P(val);
@@ -417,7 +445,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
         if (zend_hash_find(php_options, SPLIT_ALPHA_FROM_NUMERIC_KEY, strlen(SPLIT_ALPHA_FROM_NUMERIC_KEY) + 1, (void **) &val) == SUCCESS) {
             options.split_alpha_from_numeric = (bool)Z_LVAL_PP(val);
         }
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         str = zend_string_init(SPLIT_ALPHA_FROM_NUMERIC_KEY, strlen(SPLIT_ALPHA_FROM_NUMERIC_KEY), 0);
         if ((val = zend_hash_find(php_options, str)) != NULL) {
             options.split_alpha_from_numeric = (bool)Z_LVAL_P(val);
@@ -430,7 +458,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
         if (zend_hash_find(php_options, REPLACE_WORD_HYPHENS_KEY, strlen(REPLACE_WORD_HYPHENS_KEY) + 1, (void **) &val) == SUCCESS) {
             options.replace_word_hyphens = (bool)Z_LVAL_PP(val);
         }
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         str = zend_string_init(REPLACE_WORD_HYPHENS_KEY, strlen(REPLACE_WORD_HYPHENS_KEY), 0);
         if ((val = zend_hash_find(php_options, str)) != NULL) {
             options.replace_word_hyphens = (bool)Z_LVAL_P(val);
@@ -443,7 +471,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
         if (zend_hash_find(php_options, DELETE_WORD_HYPHENS_KEY, strlen(DELETE_WORD_HYPHENS_KEY) + 1, (void **) &val) == SUCCESS) {
             options.delete_word_hyphens = (bool)Z_LVAL_PP(val);
         }
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         str = zend_string_init(DELETE_WORD_HYPHENS_KEY, strlen(DELETE_WORD_HYPHENS_KEY), 0);
         if ((val = zend_hash_find(php_options, str)) != NULL) {
             options.delete_word_hyphens = (bool)Z_LVAL_P(val);
@@ -456,7 +484,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
         if (zend_hash_find(php_options, DELETE_FINAL_PERIODS_KEY, strlen(DELETE_FINAL_PERIODS_KEY) + 1, (void **) &val) == SUCCESS) {
             options.delete_final_periods = (bool)Z_LVAL_PP(val);
         }
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         str = zend_string_init(DELETE_FINAL_PERIODS_KEY, strlen(DELETE_FINAL_PERIODS_KEY), 0);
         if ((val = zend_hash_find(php_options, str)) != NULL) {
             options.delete_final_periods = (bool)Z_LVAL_P(val);
@@ -469,7 +497,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
         if (zend_hash_find(php_options, DELETE_ACRONYM_PERIODS_KEY, strlen(DELETE_ACRONYM_PERIODS_KEY) + 1, (void **) &val) == SUCCESS) {
             options.delete_acronym_periods = (bool)Z_LVAL_PP(val);
         }
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         str = zend_string_init(DELETE_ACRONYM_PERIODS_KEY, strlen(DELETE_ACRONYM_PERIODS_KEY), 0);
         if ((val = zend_hash_find(php_options, str)) != NULL) {
             options.delete_acronym_periods = (bool)Z_LVAL_P(val);
@@ -482,7 +510,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
         if (zend_hash_find(php_options, DROP_ENGLISH_POSSESSIVES_KEY, strlen(DROP_ENGLISH_POSSESSIVES_KEY) + 1, (void **) &val) == SUCCESS) {
             options.drop_english_possessives = (bool)Z_LVAL_PP(val);
         }
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         str = zend_string_init(DROP_ENGLISH_POSSESSIVES_KEY, strlen(DROP_ENGLISH_POSSESSIVES_KEY), 0);
         if ((val = zend_hash_find(php_options, str)) != NULL) {
             options.drop_english_possessives = (bool)Z_LVAL_P(val);
@@ -495,7 +523,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
         if (zend_hash_find(php_options, DELETE_APOSTROPHES_KEY, strlen(DELETE_APOSTROPHES_KEY) + 1, (void **) &val) == SUCCESS) {
             options.delete_apostrophes = (bool)Z_LVAL_PP(val);
         }
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         str = zend_string_init(DELETE_APOSTROPHES_KEY, strlen(DELETE_APOSTROPHES_KEY), 0);
         if ((val = zend_hash_find(php_options, str)) != NULL) {
             options.delete_apostrophes = (bool)Z_LVAL_P(val);
@@ -508,7 +536,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
         if (zend_hash_find(php_options, EXPAND_NUMEX_KEY, strlen(EXPAND_NUMEX_KEY) + 1, (void **) &val) == SUCCESS) {
             options.expand_numex = (bool)Z_LVAL_PP(val);
         }
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         str = zend_string_init(EXPAND_NUMEX_KEY, strlen(EXPAND_NUMEX_KEY), 0);
         if ((val = zend_hash_find(php_options, str)) != NULL) {
             options.expand_numex = (bool)Z_LVAL_P(val);
@@ -521,7 +549,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
         if (zend_hash_find(php_options, ROMAN_NUMERALS_KEY, strlen(ROMAN_NUMERALS_KEY) + 1, (void **) &val) == SUCCESS) {
             options.roman_numerals = (bool)Z_LVAL_PP(val);
         }
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         str = zend_string_init(ROMAN_NUMERALS_KEY, strlen(ROMAN_NUMERALS_KEY), 0);
         if ((val = zend_hash_find(php_options, str)) != NULL) {
             options.roman_numerals = (bool)Z_LVAL_P(val);
@@ -543,14 +571,14 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
     ALLOC_INIT_ZVAL(ret);
     array_init_size(ret, num_expansions);
 
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
     array_init_size(&ret, num_expansions);
 #endif
 
     for (size_t i = 0; i < num_expansions; i++) {
 #if PHP_MAJOR_VERSION == 5
         add_index_string(ret, (int)i, expansions[i], copy);     
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         add_index_string(&ret, (int)i, expansions[i]);
 #endif
     }
@@ -572,7 +600,7 @@ static void php_postal_expand_address_impl(INTERNAL_FUNCTION_PARAMETERS, zend_bo
 
 #if PHP_MAJOR_VERSION == 5
     RETURN_ZVAL(ret, copy, destruct);
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
     RETURN_ZVAL(&ret, copy, destruct);
 #endif
 
@@ -593,7 +621,7 @@ PHP_METHOD(Parser, parse_address) {
     zval *ret;
     zval *component;
     zval **val;
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
     size_t address_len;
     zval ret;
     zval component;
@@ -602,9 +630,14 @@ PHP_METHOD(Parser, parse_address) {
 #endif
     HashTable *php_options = NULL;
 
-    if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s|h", &address, &address_len, &php_options) == FAILURE) {
-        RETURN_NULL();
-    }
+    #if PHP_MAJOR_VERSION == 5 || PHP_MAJOR_VERSION == 7
+        if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s|h", &address, &address_len, &php_options) == FAILURE) {
+            RETURN_NULL();
+        }
+    #endif
+        if (zend_parse_parameters(ZEND_NUM_ARGS(), "s|h", &address, &address_len, &php_options) == FAILURE) {
+            RETURN_NULL();
+        }
 
     libpostal_address_parser_options_t options = libpostal_get_address_parser_default_options();
     
@@ -619,7 +652,7 @@ PHP_METHOD(Parser, parse_address) {
             language = strndup(Z_STRVAL_PP(val), Z_STRLEN_PP(val));
             options.language = language;
         }
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         str = zend_string_init(LANGUAGE_KEY, strlen(LANGUAGE_KEY), 0);
         if ((val = zend_hash_find(php_options, str)) && Z_TYPE_P(val) == IS_STRING) {
             language = strndup(Z_STRVAL_P(val), Z_STRLEN_P(val));
@@ -633,7 +666,7 @@ PHP_METHOD(Parser, parse_address) {
         if (zend_hash_find(php_options, COUNTRY_KEY, strlen(COUNTRY_KEY) + 1, (void **)&val) == SUCCESS && Z_TYPE_PP(val) == IS_STRING) {
             country = strndup(Z_STRVAL_PP(val), Z_STRLEN_PP(val));
         }
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         str = zend_string_init(COUNTRY_KEY, strlen(COUNTRY_KEY), 0);
         if ((val = zend_hash_find(php_options, str)) && Z_TYPE_P(val) == IS_STRING) {
             country = strndup(Z_STRVAL_P(val), Z_STRLEN_P(val));
@@ -659,7 +692,7 @@ PHP_METHOD(Parser, parse_address) {
 #if PHP_MAJOR_VERSION == 5
         ALLOC_INIT_ZVAL(ret);
         array_init_size(ret, response->num_components);
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         array_init_size(&ret, response->num_components);
 #endif
 
@@ -673,7 +706,7 @@ PHP_METHOD(Parser, parse_address) {
             add_assoc_string(component, LABEL_KEY, response->labels[i], copy);
             add_assoc_string(component, VALUE_KEY, response->components[i], copy);
             add_index_zval(ret, (int)i, component);
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
             array_init(&component);
             add_assoc_string(&component, LABEL_KEY, response->labels[i]);
             add_assoc_string(&component, VALUE_KEY, response->components[i]);
@@ -687,7 +720,7 @@ PHP_METHOD(Parser, parse_address) {
         copy = 0;
 #if PHP_MAJOR_VERSION == 5
         RETURN_ZVAL(ret, copy, destruct);
-#elif PHP_MAJOR_VERSION == 7
+#elif PHP_MAJOR_VERSION == 7 || PHP_MAJOR_VERSION == 8
         RETURN_ZVAL(&ret, copy, destruct);
 #endif
     } else {
