@@ -22,7 +22,9 @@ foreach ($expansions as $expansion) {
 --EXPECT--
 92 avenue des champs-elysees
 92 avenue des champs elysees
+92 avenue des champselysees
 92 avenue des champs-elysees
 92 avenue des champs elysees
+92 avenue des champselysees
 friedrichstrasse 128 berlin germany
 friedrich strasse 128 berlin germany
