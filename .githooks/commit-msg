@@ -1,0 +1,8 @@
+#!/bin/sh
+
+ticket_regex='^(((CORE|TECH)-\d+)|(Merge))'
+
+if ! grep -qE "$ticket_regex" "$1"; then
+    echo "Commit message must start with a CORE or TECH issue or be a Merge commit." >&2
+    exit 1
+fi
